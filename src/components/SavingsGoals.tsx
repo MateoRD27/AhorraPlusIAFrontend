@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Target, Plus, Calendar, TrendingUp, ArrowUpCircle, ArrowDownCircle, Trash2, PartyPopper, Loader2, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { savingsService } from "../services/savingsService";
-import { transactionService } from "../services/transactionService"; // Importado para obtener el saldo
+import { transactionService } from "../services/transactionService"; // Importamos para ver el saldo
 import { useAuth } from "../hooks/useAuth";
 import type { SavingsGoal } from "../types";
 
@@ -17,7 +17,7 @@ export function SavingsGoals() {
   const { user } = useAuth();
   const [goals, setGoals] = useState<SavingsGoal[]>([]);
   const [loading, setLoading] = useState(true);
-  const [userBalance, setUserBalance] = useState(0); // Nuevo estado para el saldo
+  const [userBalance, setUserBalance] = useState(0); // Estado para el saldo disponible
   const [isOpen, setIsOpen] = useState(false);
   
   const [transactionDialog, setTransactionDialog] = useState<{ open: boolean; goalId: number | null; type: 'deposit' | 'withdraw' | null }>({
@@ -40,7 +40,7 @@ export function SavingsGoals() {
 
   const userId = user?.id ? Number(user.id) : 0;
 
-  // Cargar metas y saldo al iniciar
+  // Cargar datos iniciales
   useEffect(() => {
     if (userId) {
       loadData();
@@ -65,6 +65,7 @@ export function SavingsGoals() {
 
   const loadBalance = async () => {
     try {
+      // Obtenemos el saldo actualizado del usuario
       const balance = await transactionService.getBalance(userId);
       setUserBalance(balance);
     } catch (error) {
@@ -106,7 +107,7 @@ export function SavingsGoals() {
       return;
     }
 
-    // VALIDACIÓN DE FONDOS EN EL FRONTEND
+    // VALIDACIÓN VISUAL: Impedir ingresar más de lo disponible
     if (transactionDialog.type === 'deposit' && amount > userBalance) {
         toast.error(`Fondos insuficientes. Tienes disponible: $${userBalance.toFixed(2)}`);
         return;
@@ -131,27 +132,26 @@ export function SavingsGoals() {
       setTransactionAmount("");
       setTransactionDialog({ open: false, goalId: null, type: null });
       
-      // Actualizar tanto las metas como el saldo disponible
+      // ACTUALIZACIÓN CRÍTICA: Recargar metas Y saldo para que todo cuadre visualmente
       await loadGoals();
       await loadBalance(); 
 
     } catch (error: any) {
       console.error("Error en transacción:", error);
-      // Mostrar el mensaje específico que viene del backend
       const msg = error.response?.data?.message || "Error al procesar la transacción";
       toast.error(msg);
     }
   };
 
   const handleDeleteGoal = async (goalId: number, goalName: string) => {
-    // Mensaje claro indicando que el dinero retorna
-    if (!window.confirm(`¿Estás seguro de eliminar la meta "${goalName}"? El dinero ahorrado regresará a tu saldo disponible.`)) return;
+    if (!window.confirm(`¿Estás seguro de eliminar "${goalName}"? El dinero ahorrado regresará a tu saldo disponible.`)) return;
 
     try {
       await savingsService.deleteSavingsGoal(goalId, userId);
-      toast.success(`Meta "${goalName}" eliminada y fondos retornados`);
+      toast.success(`Meta "${goalName}" eliminada y fondos devueltos.`);
+      // Recargar saldo porque el dinero volvió a la cuenta
       await loadGoals();
-      await loadBalance(); // Actualizar saldo tras la devolución
+      await loadBalance(); 
     } catch (error) {
       console.error("Error eliminando meta:", error);
       toast.error("Error al eliminar la meta");
@@ -163,7 +163,6 @@ export function SavingsGoals() {
     setTransactionAmount("");
   };
 
-  // --- Helpers Visuales ---
   const calculateProgress = (current: number, target: number) => {
     if (target === 0) return 0;
     return Math.min((current / target) * 100, 100);
@@ -174,8 +173,7 @@ export function SavingsGoals() {
     const today = new Date();
     const target = new Date(deadline);
     const diffTime = target.getTime() - today.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays;
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   };
 
   const getPriorityColor = (priority: string) => {
@@ -202,14 +200,14 @@ export function SavingsGoals() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Metas de Ahorro</h1>
-          <p className="text-gray-600">Define y alcanza tus objetivos financieros</p>
+          <p className="text-gray-600">Ahorra con propósito. El dinero que ingreses aquí se reservará de tu saldo.</p>
         </div>
 
-        {/* Mostrar saldo disponible en la cabecera para referencia rápida */}
+        {/* INDICADOR VISUAL DE SALDO DISPONIBLE */}
         <div className="flex items-center gap-4 bg-white p-3 rounded-lg shadow-sm border">
             <div className="flex items-center gap-2 text-gray-600">
                 <Wallet size={20} className="text-indigo-600"/>
-                <span className="text-sm font-medium">Disponible:</span>
+                <span className="text-sm font-medium">Disponible para ahorrar:</span>
             </div>
             <span className="text-lg font-bold text-green-600">${userBalance.toFixed(2)}</span>
         </div>
@@ -224,24 +222,21 @@ export function SavingsGoals() {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Crear Meta de Ahorro</DialogTitle>
-              <DialogDescription>
-                Define tu objetivo de ahorro y establece un plazo
-              </DialogDescription>
+              <DialogDescription>Define tu objetivo y fecha límite.</DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="name">Nombre de la meta</Label>
+                <Label htmlFor="name">Nombre</Label>
                 <Input
                   id="name"
-                  placeholder="Ej: Vacaciones, Auto nuevo"
+                  placeholder="Ej: Vacaciones"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   required
                 />
               </div>
-
               <div className="space-y-2">
-                <Label htmlFor="target">Monto objetivo</Label>
+                <Label htmlFor="target">Monto Objetivo</Label>
                 <Input
                   id="target"
                   type="number"
@@ -252,9 +247,8 @@ export function SavingsGoals() {
                   required
                 />
               </div>
-
               <div className="space-y-2">
-                <Label htmlFor="deadline">Fecha límite</Label>
+                <Label htmlFor="deadline">Fecha Límite</Label>
                 <Input
                   id="deadline"
                   type="date"
@@ -263,7 +257,6 @@ export function SavingsGoals() {
                   required
                 />
               </div>
-
               <div className="space-y-2">
                 <Label htmlFor="priority">Prioridad</Label>
                 <Select
@@ -281,37 +274,36 @@ export function SavingsGoals() {
                   </SelectContent>
                 </Select>
               </div>
-
-              <Button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700">
-                Crear Meta
-              </Button>
+              <Button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700">Crear Meta</Button>
             </form>
           </DialogContent>
         </Dialog>
       </div>
 
-      {/* Dialog para transacciones */}
+      {/* DIALOG DE TRANSACCIÓN MEJORADO */}
       <Dialog open={transactionDialog.open} onOpenChange={(open) => !open && setTransactionDialog({ open: false, goalId: null, type: null })}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>
-              {transactionDialog.type === 'deposit' ? 'Ingresar Dinero' : 'Retirar Dinero'}
-            </DialogTitle>
+            <DialogTitle>{transactionDialog.type === 'deposit' ? 'Ingresar Ahorro' : 'Retirar Ahorro'}</DialogTitle>
             <DialogDescription>
               {selectedGoal && (
-                <div className="mt-2 space-y-1">
+                <div className="mt-2 p-3 bg-gray-50 rounded text-sm space-y-1">
                   <p>Meta: <strong>{selectedGoal.name}</strong></p>
-                  <p>En la meta: <span className="text-indigo-600 font-semibold">${selectedGoal.currentAmount.toFixed(2)}</span></p>
-                  <p>En tu bolsillo: <span className="text-green-600 font-semibold">${userBalance.toFixed(2)}</span></p>
+                  <div className="flex justify-between">
+                    <span>Dinero en meta:</span>
+                    <span className="font-semibold text-indigo-600">${selectedGoal.currentAmount.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between border-t pt-1 mt-1">
+                    <span>Tu saldo disponible:</span>
+                    <span className="font-semibold text-green-600">${userBalance.toFixed(2)}</span>
+                  </div>
                 </div>
               )}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleTransaction} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="amount">
-                Monto a {transactionDialog.type === 'deposit' ? 'ingresar' : 'retirar'}
-              </Label>
+              <Label htmlFor="amount">Monto</Label>
               <Input
                 id="amount"
                 type="number"
@@ -323,67 +315,41 @@ export function SavingsGoals() {
                 required
                 autoFocus
               />
-              {transactionDialog.type === 'deposit' && (
-                 <p className="text-xs text-gray-500">Máximo disponible para ingresar: ${userBalance.toFixed(2)}</p>
-              )}
-              {transactionDialog.type === 'withdraw' && selectedGoal && (
-                 <p className="text-xs text-gray-500">Máximo disponible para retirar: ${selectedGoal.currentAmount.toFixed(2)}</p>
-              )}
+              {/* Ayuda visual de límites */}
+              <p className="text-xs text-gray-500 text-right">
+                {transactionDialog.type === 'deposit' 
+                  ? `Máx. a ingresar: $${userBalance.toFixed(2)}` 
+                  : `Máx. a retirar: $${selectedGoal?.currentAmount.toFixed(2) || '0.00'}`
+                }
+              </p>
             </div>
             
-            {selectedGoal && transactionDialog.type === 'deposit' && (
-              <p className="text-sm text-gray-600">
-                Falta para completar: ${Math.max(0, selectedGoal.targetAmount - selectedGoal.currentAmount).toFixed(2)}
-              </p>
-            )}
-
-            <div className="flex gap-2">
-              <Button 
-                type="button" 
-                variant="outline" 
-                className="flex-1"
-                onClick={() => setTransactionDialog({ open: false, goalId: null, type: null })}
-              >
-                Cancelar
-              </Button>
-              <Button 
-                type="submit" 
-                className={`flex-1 ${
-                  transactionDialog.type === 'deposit' 
-                    ? 'bg-green-600 hover:bg-green-700' 
-                    : 'bg-red-600 hover:bg-red-700'
-                }`}
-              >
-                {transactionDialog.type === 'deposit' ? 'Ingresar' : 'Retirar'}
+            <div className="flex gap-2 pt-2">
+              <Button type="button" variant="outline" className="flex-1" onClick={() => setTransactionDialog({ open: false, goalId: null, type: null })}>Cancelar</Button>
+              <Button type="submit" className={`flex-1 ${transactionDialog.type === 'deposit' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}>
+                {transactionDialog.type === 'deposit' ? 'Ahorrar' : 'Retirar'}
               </Button>
             </div>
           </form>
         </DialogContent>
       </Dialog>
 
-      {/* Dialog de celebración */}
+      {/* DIALOG CELEBRACION */}
       <Dialog open={celebrationDialog.open} onOpenChange={(open) => !open && setCelebrationDialog({ open: false, goalName: "" })}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle className="text-center text-2xl text-green-600">¡Felicidades!</DialogTitle>
+            <DialogTitle className="text-center text-2xl text-green-600">¡Meta Alcanzada!</DialogTitle>
             <DialogDescription className="text-center text-lg">
-              ¡Has completado la meta de ahorro "{celebrationDialog.goalName}"!
+              Has completado el objetivo "{celebrationDialog.goalName}".
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-center py-6">
             <PartyPopper size={80} className="text-yellow-500 animate-bounce" />
           </div>
-          <Button 
-            type="button" 
-            className="w-full bg-indigo-600 hover:bg-indigo-700"
-            onClick={() => setCelebrationDialog({ open: false, goalName: "" })}
-          >
-            ¡Genial!
-          </Button>
+          <Button className="w-full bg-indigo-600" onClick={() => setCelebrationDialog({ open: false, goalName: "" })}>¡Genial!</Button>
         </DialogContent>
       </Dialog>
 
-      {/* Lista de Metas */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {goals.map((goal) => {
           const progress = calculateProgress(goal.currentAmount, goal.targetAmount);
@@ -399,16 +365,8 @@ export function SavingsGoals() {
                     <CardTitle className="text-lg">{goal.name}</CardTitle>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className={`text-xs px-2 py-1 rounded ${getPriorityColor(goal.priority)}`}>
-                      {goal.priority}
-                    </span>
-                    <Button 
-                      size="icon" 
-                      variant="ghost"
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50 h-8 w-8"
-                      onClick={() => handleDeleteGoal(goal.idGoal, goal.name)}
-                      title="Eliminar meta"
-                    >
+                    <span className={`text-xs px-2 py-1 rounded ${getPriorityColor(goal.priority)}`}>{goal.priority}</span>
+                    <Button size="icon" variant="ghost" className="text-red-600 h-8 w-8 hover:bg-red-100" onClick={() => handleDeleteGoal(goal.idGoal, goal.name)}>
                       <Trash2 size={16} />
                     </Button>
                   </div>
@@ -416,61 +374,32 @@ export function SavingsGoals() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
-                  <div className="flex justify-between mb-2">
-                    <span className="text-sm text-gray-600">Progreso</span>
-                    <span className="text-sm font-medium">{progress.toFixed(1)}%</span>
+                  <div className="flex justify-between mb-2 text-sm">
+                    <span>Progreso</span>
+                    <span className="font-medium">{progress.toFixed(0)}%</span>
                   </div>
                   <Progress value={progress} className="h-2" />
                 </div>
-
-                <div className="flex items-center justify-between text-sm">
+                <div className="flex justify-between text-sm">
                   <div>
-                    <p className="text-gray-600">Actual</p>
-                    <p className="text-green-600 font-semibold">${goal.currentAmount.toFixed(2)}</p>
+                    <p className="text-gray-500">Ahorrado</p>
+                    <p className="font-semibold text-green-600">${goal.currentAmount.toFixed(2)}</p>
                   </div>
-                  <TrendingUp className="text-gray-400" size={16} />
                   <div className="text-right">
-                    <p className="text-gray-600">Objetivo</p>
-                    <p className="text-indigo-600 font-semibold">${goal.targetAmount.toFixed(2)}</p>
+                    <p className="text-gray-500">Objetivo</p>
+                    <p className="font-semibold text-indigo-600">${goal.targetAmount.toFixed(2)}</p>
                   </div>
                 </div>
-
-                <div className="flex items-center gap-2 text-sm text-gray-600 pt-2 border-t">
-                  <Calendar size={16} />
-                  <span>
-                    {isCompleted 
-                      ? "¡Meta Completada!" 
-                      : daysRemaining > 0 
-                        ? `${daysRemaining} días restantes`
-                        : "Plazo vencido"
-                    }
-                  </span>
-                </div>
-
-                <div className="pt-2">
-                  {!isCompleted && (
-                    <p className="text-sm text-gray-600 mb-3">Falta: ${(goal.targetAmount - goal.currentAmount).toFixed(2)}</p>
-                  )}
-                  <div className="flex gap-2">
-                    <Button 
-                      size="sm" 
-                      className="flex-1 bg-green-600 hover:bg-green-700"
-                      onClick={() => openTransactionDialog(goal.idGoal, 'deposit')}
-                    >
-                      <ArrowUpCircle size={16} className="mr-1" />
-                      Ingresar
+                <div className="flex gap-2 pt-2">
+                    <Button size="sm" className="flex-1 bg-green-600 hover:bg-green-700" onClick={() => openTransactionDialog(goal.idGoal, 'deposit')}>
+                      <ArrowUpCircle size={16} className="mr-1" /> Ahorrar
                     </Button>
-                    <Button 
-                      size="sm" 
-                      variant="outline"
-                      className="flex-1 text-red-600 border-red-600 hover:bg-red-50"
+                    <Button size="sm" variant="outline" className="flex-1 border-red-200 text-red-700 hover:bg-red-50" 
                       onClick={() => openTransactionDialog(goal.idGoal, 'withdraw')}
-                      disabled={goal.currentAmount === 0}
+                      disabled={goal.currentAmount <= 0}
                     >
-                      <ArrowDownCircle size={16} className="mr-1" />
-                      Retirar
+                      <ArrowDownCircle size={16} className="mr-1" /> Retirar
                     </Button>
-                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -478,8 +407,8 @@ export function SavingsGoals() {
         })}
         
         {goals.length === 0 && !loading && (
-          <div className="col-span-full text-center py-10 text-gray-500">
-            No tienes metas registradas. ¡Crea una para empezar a ahorrar!
+          <div className="col-span-full text-center py-12 text-gray-500 border-2 border-dashed rounded-lg">
+            No tienes metas activas. ¡Crea una para comenzar a ahorrar!
           </div>
         )}
       </div>
