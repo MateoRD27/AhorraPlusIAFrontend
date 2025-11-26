@@ -147,7 +147,7 @@ export function IncomeManagement() {
               </div>
               <div className="space-y-2">
                 <Label>Fuente *</Label>
-                <Select value={formData.source} onValueChange={(value) => setFormData({ ...formData, source: value })} required>
+                <Select value={formData.source} onValueChange={(value: string)  => setFormData({ ...formData, source: value })} required>
                   <SelectTrigger><SelectValue placeholder="Selecciona..." /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Salario">Salario</SelectItem>
