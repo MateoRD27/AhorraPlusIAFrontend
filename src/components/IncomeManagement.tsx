@@ -5,18 +5,20 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { Plus, Edit, Trash2, Loader2, RefreshCw } from "lucide-react";
+import { Loader2, RefreshCw, Plus, Edit, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { transactionService } from "../services/transactionService";
-import type { Income, IncomeFormData } from "../types";
-
-const CURRENT_USER_ID = 1;
+import type { Income, IncomeFormData, User } from "../types";
+import { authService } from "../services/authService";
 
 export function IncomeManagement() {
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+
   const [incomes, setIncomes] = useState<Income[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
+
   const [formData, setFormData] = useState<IncomeFormData>({
     amount: "",
     source: "",
@@ -24,14 +26,32 @@ export function IncomeManagement() {
     description: "",
   });
 
+  // Cargar usuario al inicio
   useEffect(() => {
-    loadIncomes();
+    const loadUser = async () => {
+      try {
+        const user = await authService.getCurrentUser();
+        setCurrentUser(user);
+      } catch (error) {
+        console.error("Error cargando usuario:", error);
+      }
+    };
+    loadUser();
   }, []);
 
+  // Cargar ingresos cuando ya hay usuario
+  useEffect(() => {
+    if (currentUser) {
+      loadIncomes();
+    }
+  }, [currentUser]);
+
   const loadIncomes = async () => {
+    if (!currentUser) return;
+
     try {
       setLoading(true);
-      const data = await transactionService.getIncomes(CURRENT_USER_ID);
+      const data = await transactionService.getIncomes(currentUser.id);
       setIncomes(data);
     } catch (error) {
       console.error("Error loading incomes:", error);
@@ -43,7 +63,8 @@ export function IncomeManagement() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+    if (!currentUser) return;
+
     if (!formData.amount || !formData.source || !formData.date) {
       toast.error("Por favor completa todos los campos requeridos");
       return;
@@ -60,11 +81,11 @@ export function IncomeManagement() {
       };
 
       if (editingId) {
-        await transactionService.updateIncome(editingId, CURRENT_USER_ID, incomeData);
+        await transactionService.updateIncome(editingId, currentUser.id, incomeData);
         toast.success("Ingreso actualizado exitosamente");
         setEditingId(null);
       } else {
-        await transactionService.createIncome(CURRENT_USER_ID, incomeData);
+        await transactionService.createIncome(currentUser.id, incomeData);
         toast.success("Ingreso registrado exitosamente");
       }
 
@@ -86,7 +107,7 @@ export function IncomeManagement() {
       date: income.date,
       description: income.description || "",
     });
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const handleCancelEdit = () => {
@@ -95,12 +116,12 @@ export function IncomeManagement() {
   };
 
   const handleDelete = async (idIncome: number) => {
-    if (!window.confirm("¿Estás seguro de eliminar este ingreso?")) {
-      return;
-    }
+    if (!currentUser) return;
+
+    if (!window.confirm("¿Estás seguro de eliminar este ingreso?")) return;
 
     try {
-      await transactionService.deleteIncome(idIncome, CURRENT_USER_ID);
+      await transactionService.deleteIncome(idIncome, currentUser.id);
       toast.success("Ingreso eliminado");
       await loadIncomes();
     } catch (error) {
@@ -109,25 +130,34 @@ export function IncomeManagement() {
     }
   };
 
+  // Pantalla mientras carga el usuario
+  if (!currentUser) {
+    return (
+      <div className="flex justify-center items-center py-12 text-gray-500">
+        <Loader2 className="h-8 w-8 animate-spin" />
+        <span className="ml-3">Cargando usuario...</span>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Gestión de Ingresos</h1>
           <p className="text-gray-600">Registra y administra tus ingresos</p>
         </div>
-        <Button 
-          variant="outline" 
-          size="sm" 
-          onClick={loadIncomes}
-          disabled={loading}
-        >
-          <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+
+        <Button variant="outline" size="sm" onClick={loadIncomes} disabled={loading}>
+          <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
           Actualizar
         </Button>
       </div>
 
+      {/* Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Formulario */}
         <Card className="lg:col-span-1">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -137,6 +167,7 @@ export function IncomeManagement() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
+
               <div className="space-y-2">
                 <Label htmlFor="amount">Monto *</Label>
                 <Input
@@ -146,7 +177,6 @@ export function IncomeManagement() {
                   placeholder="0.00"
                   value={formData.amount}
                   onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                  required
                   disabled={submitting}
                 />
               </div>
@@ -155,8 +185,9 @@ export function IncomeManagement() {
                 <Label htmlFor="source">Fuente *</Label>
                 <Select
                   value={formData.source}
-                  onValueChange={(value: string) => setFormData({ ...formData, source: value })}
-                  required
+                  onValueChange={(value: string) =>
+                    setFormData({ ...formData, source: value })
+                  }
                   disabled={submitting}
                 >
                   <SelectTrigger>
@@ -181,7 +212,6 @@ export function IncomeManagement() {
                   type="date"
                   value={formData.date}
                   onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                  required
                   disabled={submitting}
                 />
               </div>
@@ -199,21 +229,17 @@ export function IncomeManagement() {
               </div>
 
               <div className="space-y-2">
-                <Button 
+                <Button
                   onClick={handleSubmit}
                   className="w-full bg-green-600 hover:bg-green-700"
                   disabled={submitting}
                 >
                   {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  {editingId ? "Actualizar Ingreso" : "Guardar Ingreso"}
+                  {editingId ? "Actualizar Ingreso" : "Registrar Ingreso"}
                 </Button>
+
                 {editingId && (
-                  <Button
-                    variant="outline"
-                    className="w-full"
-                    onClick={handleCancelEdit}
-                    disabled={submitting}
-                  >
+                  <Button variant="outline" className="w-full" onClick={handleCancelEdit}>
                     Cancelar
                   </Button>
                 )}
@@ -222,19 +248,19 @@ export function IncomeManagement() {
           </CardContent>
         </Card>
 
+        {/* Tabla */}
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle>Ingresos Recientes</CardTitle>
           </CardHeader>
+
           <CardContent>
             {loading ? (
               <div className="flex justify-center items-center py-8">
                 <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
               </div>
             ) : incomes.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                No hay ingresos registrados
-              </div>
+              <div className="text-center py-8 text-gray-500">No hay ingresos registrados</div>
             ) : (
               <Table>
                 <TableHeader>
@@ -246,6 +272,7 @@ export function IncomeManagement() {
                     <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
+
                 <TableBody>
                   {incomes.map((income) => (
                     <TableRow key={income.idIncome}>
@@ -253,22 +280,15 @@ export function IncomeManagement() {
                       <TableCell>{income.source}</TableCell>
                       <TableCell>{income.description || "-"}</TableCell>
                       <TableCell className="text-right font-semibold text-green-600">
-                        ${income.amount.toFixed(2)}
+                        +${income.amount.toFixed(2)}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            onClick={() => handleEdit(income)}
-                          >
+                          <Button variant="ghost" size="sm" onClick={() => handleEdit(income)}>
                             <Edit size={16} />
                           </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            onClick={() => handleDelete(income.idIncome)}
-                          >
+
+                          <Button variant="ghost" size="sm" onClick={() => handleDelete(income.idIncome)}>
                             <Trash2 size={16} className="text-red-600" />
                           </Button>
                         </div>

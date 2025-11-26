@@ -22,7 +22,7 @@ export interface PaginatedResponse<T> {
 // USER TYPES
 // 
 export interface User {
-  id: string | number;
+  id: number;
   name: string;
   email: string;
   role?: 'user' | 'admin';
@@ -33,6 +33,7 @@ export interface User {
   balance?: number;
   lastActivity?: string;
 }
+
 
 export interface AuthResponse {
   token: string;

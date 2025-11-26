@@ -9,11 +9,13 @@ import { Alert, AlertDescription } from "./ui/alert";
 import { Plus, Edit, Trash2, AlertCircle, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { transactionService } from "../services/transactionService";
-import type { Expense, ExpenseFormData } from "../types";
-
-const CURRENT_USER_ID = 1;
+import type { Expense, ExpenseFormData, User } from "../types";
+import { authService } from "../services/authService";
 
 export function ExpenseManagement() {
+
+  const [currentUser, setCurrentUser] = useState<User | null>(null); 
+
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -27,16 +29,34 @@ export function ExpenseManagement() {
   });
   const [showWarning, setShowWarning] = useState(false);
 
+  // Cargar usuario al montar el componente
   useEffect(() => {
-    loadData();
+    const loadUser = async () => {
+      try {
+        const user = await authService.getCurrentUser();
+        setCurrentUser(user);
+      } catch (error) {
+        console.error("Error cargando usuario:", error);
+      }
+    };
+    loadUser();
   }, []);
 
+  // Cargar datos solo cuando ya tenemos el usuario
+  useEffect(() => {
+    if (currentUser) {
+      loadData();
+    }
+  }, [currentUser]);
+
   const loadData = async () => {
+    if (!currentUser) return;
+
     try {
       setLoading(true);
       const [expensesData, balance] = await Promise.all([
-        transactionService.getExpenses(CURRENT_USER_ID),
-        transactionService.getBalance(CURRENT_USER_ID)
+        transactionService.getExpenses(currentUser.id),
+        transactionService.getBalance(currentUser.id)
       ]);
       setExpenses(expensesData);
       setAvailableBalance(balance);
@@ -59,7 +79,9 @@ export function ExpenseManagement() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
+    if (!currentUser) return; // seguridad
+
     if (!formData.amount || !formData.method || !formData.date) {
       toast.error("Por favor completa todos los campos requeridos");
       return;
@@ -81,11 +103,11 @@ export function ExpenseManagement() {
       };
 
       if (editingId) {
-        await transactionService.updateExpense(editingId, CURRENT_USER_ID, expenseData);
+        await transactionService.updateExpense(editingId, currentUser.id, expenseData);
         toast.success("Gasto actualizado exitosamente");
         setEditingId(null);
       } else {
-        await transactionService.createExpense(CURRENT_USER_ID, expenseData);
+        await transactionService.createExpense(currentUser.id, expenseData);
         toast.success("Gasto registrado exitosamente");
       }
 
@@ -108,7 +130,7 @@ export function ExpenseManagement() {
       date: expense.date,
       description: expense.description || "",
     });
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const handleCancelEdit = () => {
@@ -118,12 +140,14 @@ export function ExpenseManagement() {
   };
 
   const handleDelete = async (idExpense: number) => {
+    if (!currentUser) return;
+
     if (!window.confirm("¿Estás seguro de eliminar este gasto?")) {
       return;
     }
 
     try {
-      await transactionService.deleteExpense(idExpense, CURRENT_USER_ID);
+      await transactionService.deleteExpense(idExpense, currentUser.id);
       toast.success("Gasto eliminado");
       await loadData();
     } catch (error) {
