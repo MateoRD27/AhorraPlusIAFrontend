@@ -6,21 +6,19 @@ import { Label } from "./ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { Alert, AlertDescription } from "./ui/alert";
-import { Plus, Edit, Trash2, AlertCircle, Loader2, RefreshCw } from "lucide-react";
+import { Plus, Edit, Trash2, AlertCircle, Loader2, RefreshCw, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { transactionService } from "../services/transactionService";
-import type { Expense, ExpenseFormData, User } from "../types";
-import { authService } from "../services/authService";
+import { useAuth } from "../hooks/useAuth";
+import type { Expense, ExpenseFormData } from "../types";
 
 export function ExpenseManagement() {
-
-  const [currentUser, setCurrentUser] = useState<User | null>(null); 
-
+  const { user } = useAuth();
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [availableBalance, setAvailableBalance] = useState(0);
+  const [userBalance, setUserBalance] = useState(0);
   const [formData, setFormData] = useState<ExpenseFormData>({
     amount: "",
     method: "",
@@ -29,48 +27,43 @@ export function ExpenseManagement() {
   });
   const [showWarning, setShowWarning] = useState(false);
 
-  // Cargar usuario al montar el componente
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const user = await authService.getCurrentUser();
-        setCurrentUser(user);
-      } catch (error) {
-        console.error("Error cargando usuario:", error);
-      }
-    };
-    loadUser();
-  }, []);
+  const userId = user?.id ? Number(user.id) : 0;
 
-  // Cargar datos solo cuando ya tenemos el usuario
   useEffect(() => {
-    if (currentUser) {
+    if (userId) {
       loadData();
     }
-  }, [currentUser]);
+  }, [userId]);
 
   const loadData = async () => {
-    if (!currentUser) return;
+    setLoading(true);
+    await Promise.all([loadExpenses(), loadBalance()]);
+    setLoading(false);
+  };
 
+  const loadExpenses = async () => {
     try {
-      setLoading(true);
-      const [expensesData, balance] = await Promise.all([
-        transactionService.getExpenses(currentUser.id),
-        transactionService.getBalance(currentUser.id)
-      ]);
-      setExpenses(expensesData);
-      setAvailableBalance(balance);
+      const data = await transactionService.getExpenses(userId);
+      setExpenses(data);
     } catch (error) {
-      console.error("Error loading data:", error);
-      toast.error("Error al cargar los datos");
-    } finally {
-      setLoading(false);
+      console.error("Error loading expenses:", error);
+      toast.error("Error al cargar los gastos");
+    }
+  };
+
+  const loadBalance = async () => {
+    try {
+      const balance = await transactionService.getBalance(userId);
+      setUserBalance(balance);
+    } catch (error) {
+      console.error("Error loading balance:", error);
     }
   };
 
   const handleAmountChange = (value: string) => {
     setFormData({ ...formData, amount: value });
-    if (parseFloat(value) > availableBalance) {
+    // Advertencia visual si supera el saldo
+    if (parseFloat(value) > userBalance) {
       setShowWarning(true);
     } else {
       setShowWarning(false);
@@ -79,18 +72,17 @@ export function ExpenseManagement() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!currentUser) return; // seguridad
-
+    
     if (!formData.amount || !formData.method || !formData.date) {
       toast.error("Por favor completa todos los campos requeridos");
       return;
     }
 
-    if (parseFloat(formData.amount) > availableBalance) {
-      toast.error("El gasto supera tu saldo disponible");
-      return;
-    }
+    // Opcional: Bloquear si no hay saldo. Si quieres permitir saldo negativo, comenta esto.
+    // if (parseFloat(formData.amount) > userBalance && !editingId) {
+    //   toast.error("El gasto supera tu saldo disponible");
+    //   return;
+    // }
 
     setSubmitting(true);
 
@@ -103,17 +95,17 @@ export function ExpenseManagement() {
       };
 
       if (editingId) {
-        await transactionService.updateExpense(editingId, currentUser.id, expenseData);
-        toast.success("Gasto actualizado exitosamente");
+        await transactionService.updateExpense(editingId, userId, expenseData);
+        toast.success("Gasto actualizado y saldo ajustado");
         setEditingId(null);
       } else {
-        await transactionService.createExpense(currentUser.id, expenseData);
-        toast.success("Gasto registrado exitosamente");
+        await transactionService.createExpense(userId, expenseData);
+        toast.success("Gasto registrado y descontado del saldo");
       }
 
       setFormData({ amount: "", method: "", date: "", description: "" });
       setShowWarning(false);
-      await loadData();
+      await loadData(); // Recarga completa para ver el nuevo saldo
     } catch (error) {
       console.error("Error saving expense:", error);
       toast.error(editingId ? "Error al actualizar el gasto" : "Error al registrar el gasto");
@@ -130,7 +122,7 @@ export function ExpenseManagement() {
       date: expense.date,
       description: expense.description || "",
     });
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleCancelEdit = () => {
@@ -140,15 +132,13 @@ export function ExpenseManagement() {
   };
 
   const handleDelete = async (idExpense: number) => {
-    if (!currentUser) return;
-
-    if (!window.confirm("¿Estás seguro de eliminar este gasto?")) {
+    if (!window.confirm("¿Estás seguro? El monto de este gasto se devolverá a tu saldo.")) {
       return;
     }
 
     try {
-      await transactionService.deleteExpense(idExpense, currentUser.id);
-      toast.success("Gasto eliminado");
+      await transactionService.deleteExpense(idExpense, userId);
+      toast.success("Gasto eliminado y fondos devueltos");
       await loadData();
     } catch (error) {
       console.error("Error deleting expense:", error);
@@ -158,24 +148,18 @@ export function ExpenseManagement() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col md:flex-row justify-between items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Gestión de Gastos</h1>
           <p className="text-gray-600">Registra y controla tus gastos</p>
         </div>
-        <div className="text-right">
-          <p className="text-sm text-gray-500">Saldo disponible</p>
-          <p className="text-2xl font-bold text-green-600">${availableBalance.toFixed(2)}</p>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={loadData}
-            disabled={loading}
-            className="mt-2"
-          >
-            <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            Actualizar
-          </Button>
+        
+        <div className="flex items-center gap-4 bg-white p-3 rounded-lg shadow-sm border">
+            <div className="flex items-center gap-2 text-gray-600">
+                <Wallet size={20} className="text-red-600"/>
+                <span className="text-sm font-medium">Saldo Disponible:</span>
+            </div>
+            <span className="text-lg font-bold text-green-600">${userBalance.toFixed(2)}</span>
         </div>
       </div>
 
@@ -202,10 +186,10 @@ export function ExpenseManagement() {
                   disabled={submitting}
                 />
                 {showWarning && (
-                  <Alert className="bg-red-50 border-red-200">
+                  <Alert className="bg-red-50 border-red-200 mt-2">
                     <AlertCircle className="h-4 w-4 text-red-600" />
-                    <AlertDescription className="text-red-800 text-sm">
-                      Este gasto supera tu saldo disponible (${availableBalance.toFixed(2)})
+                    <AlertDescription className="text-red-800 text-xs">
+                      Este gasto supera tu saldo actual (${userBalance.toFixed(2)})
                     </AlertDescription>
                   </Alert>
                 )}
@@ -281,14 +265,15 @@ export function ExpenseManagement() {
 
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>Gastos Recientes</CardTitle>
+            <div className="flex justify-between items-center">
+                <CardTitle>Gastos Recientes</CardTitle>
+                <Button variant="ghost" size="sm" onClick={loadData} disabled={loading}>
+                    <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                </Button>
+            </div>
           </CardHeader>
           <CardContent>
-            {loading ? (
-              <div className="flex justify-center items-center py-8">
-                <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-              </div>
-            ) : expenses.length === 0 ? (
+            {expenses.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
                 No hay gastos registrados
               </div>
