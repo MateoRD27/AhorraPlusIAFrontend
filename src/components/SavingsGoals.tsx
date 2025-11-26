@@ -6,17 +6,20 @@ import { Label } from "./ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Progress } from "./ui/progress";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog";
-import { Target, Plus, Calendar, TrendingUp, ArrowUpCircle, ArrowDownCircle, Trash2, PartyPopper, Loader2 } from "lucide-react";
+import { Target, Plus, Calendar, TrendingUp, ArrowUpCircle, ArrowDownCircle, Trash2, PartyPopper, Loader2, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { savingsService } from "../services/savingsService";
-import { useAuth } from "../hooks/useAuth"; // Hook para obtener el usuario
+import { transactionService } from "../services/transactionService"; // Importado para obtener el saldo
+import { useAuth } from "../hooks/useAuth";
 import type { SavingsGoal } from "../types";
 
 export function SavingsGoals() {
-  const { user } = useAuth(); // Obtenemos el usuario autenticado
+  const { user } = useAuth();
   const [goals, setGoals] = useState<SavingsGoal[]>([]);
   const [loading, setLoading] = useState(true);
+  const [userBalance, setUserBalance] = useState(0); // Nuevo estado para el saldo
   const [isOpen, setIsOpen] = useState(false);
+  
   const [transactionDialog, setTransactionDialog] = useState<{ open: boolean; goalId: number | null; type: 'deposit' | 'withdraw' | null }>({
     open: false,
     goalId: null,
@@ -28,33 +31,44 @@ export function SavingsGoals() {
     goalName: "",
   });
   
-  // Formulario
   const [formData, setFormData] = useState({
     name: "",
     target: "",
     deadline: "",
-    priority: "MEDIUM", // Valor por defecto compatible con backend
+    priority: "MEDIUM",
   });
 
   const userId = user?.id ? Number(user.id) : 0;
 
-  // Cargar metas al iniciar
+  // Cargar metas y saldo al iniciar
   useEffect(() => {
     if (userId) {
-      loadGoals();
+      loadData();
     }
   }, [userId]);
 
+  const loadData = async () => {
+    setLoading(true);
+    await Promise.all([loadGoals(), loadBalance()]);
+    setLoading(false);
+  };
+
   const loadGoals = async () => {
     try {
-      setLoading(true);
       const data = await savingsService.getSavingsGoals(userId);
       setGoals(data);
     } catch (error) {
       console.error("Error cargando metas:", error);
       toast.error("Error al cargar las metas de ahorro");
-    } finally {
-      setLoading(false);
+    }
+  };
+
+  const loadBalance = async () => {
+    try {
+      const balance = await transactionService.getBalance(userId);
+      setUserBalance(balance);
+    } catch (error) {
+      console.error("Error cargando saldo:", error);
     }
   };
 
@@ -66,16 +80,16 @@ export function SavingsGoals() {
       await savingsService.createSavingsGoal(userId, {
         name: formData.name,
         targetAmount: parseFloat(formData.target),
-        endDate: formData.deadline, // Mapeamos deadline del form a endDate del DTO
+        endDate: formData.deadline,
         priority: formData.priority,
-        startDate: new Date().toISOString().split('T')[0], // Fecha de hoy
-        frequency: 'MONTHLY' // Valor por defecto
+        startDate: new Date().toISOString().split('T')[0],
+        frequency: 'MONTHLY'
       });
 
       toast.success("Meta de ahorro creada exitosamente");
       setFormData({ name: "", target: "", deadline: "", priority: "MEDIUM" });
       setIsOpen(false);
-      loadGoals(); // Recargar lista
+      loadGoals(); 
     } catch (error) {
       console.error("Error creando meta:", error);
       toast.error("Error al crear la meta");
@@ -92,13 +106,18 @@ export function SavingsGoals() {
       return;
     }
 
+    // VALIDACIÓN DE FONDOS EN EL FRONTEND
+    if (transactionDialog.type === 'deposit' && amount > userBalance) {
+        toast.error(`Fondos insuficientes. Tienes disponible: $${userBalance.toFixed(2)}`);
+        return;
+    }
+
     try {
       let updatedGoal;
       if (transactionDialog.type === 'deposit') {
         updatedGoal = await savingsService.addToSavingsGoal(transactionDialog.goalId, userId, amount);
         toast.success(`Abono exitoso a "${updatedGoal.name}"`);
         
-        // Verificar si se completó (el backend cambia el estado)
         if (updatedGoal.status === 'COMPLETED') {
            setTimeout(() => {
              setCelebrationDialog({ open: true, goalName: updatedGoal.name });
@@ -111,22 +130,28 @@ export function SavingsGoals() {
 
       setTransactionAmount("");
       setTransactionDialog({ open: false, goalId: null, type: null });
-      loadGoals(); // Recargar datos frescos del backend
+      
+      // Actualizar tanto las metas como el saldo disponible
+      await loadGoals();
+      await loadBalance(); 
+
     } catch (error: any) {
       console.error("Error en transacción:", error);
-      // Mostrar mensaje de error del backend si existe (ej: fondos insuficientes)
+      // Mostrar el mensaje específico que viene del backend
       const msg = error.response?.data?.message || "Error al procesar la transacción";
       toast.error(msg);
     }
   };
 
   const handleDeleteGoal = async (goalId: number, goalName: string) => {
-    if (!window.confirm(`¿Estás seguro de eliminar la meta "${goalName}"?`)) return;
+    // Mensaje claro indicando que el dinero retorna
+    if (!window.confirm(`¿Estás seguro de eliminar la meta "${goalName}"? El dinero ahorrado regresará a tu saldo disponible.`)) return;
 
     try {
       await savingsService.deleteSavingsGoal(goalId, userId);
-      toast.success(`Meta "${goalName}" eliminada`);
-      loadGoals();
+      toast.success(`Meta "${goalName}" eliminada y fondos retornados`);
+      await loadGoals();
+      await loadBalance(); // Actualizar saldo tras la devolución
     } catch (error) {
       console.error("Error eliminando meta:", error);
       toast.error("Error al eliminar la meta");
@@ -174,10 +199,19 @@ export function SavingsGoals() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Metas de Ahorro</h1>
           <p className="text-gray-600">Define y alcanza tus objetivos financieros</p>
+        </div>
+
+        {/* Mostrar saldo disponible en la cabecera para referencia rápida */}
+        <div className="flex items-center gap-4 bg-white p-3 rounded-lg shadow-sm border">
+            <div className="flex items-center gap-2 text-gray-600">
+                <Wallet size={20} className="text-indigo-600"/>
+                <span className="text-sm font-medium">Disponible:</span>
+            </div>
+            <span className="text-lg font-bold text-green-600">${userBalance.toFixed(2)}</span>
         </div>
         
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -265,9 +299,11 @@ export function SavingsGoals() {
             </DialogTitle>
             <DialogDescription>
               {selectedGoal && (
-                <>
-                  Meta: {selectedGoal.name} (Disponible: ${selectedGoal.currentAmount.toFixed(2)})
-                </>
+                <div className="mt-2 space-y-1">
+                  <p>Meta: <strong>{selectedGoal.name}</strong></p>
+                  <p>En la meta: <span className="text-indigo-600 font-semibold">${selectedGoal.currentAmount.toFixed(2)}</span></p>
+                  <p>En tu bolsillo: <span className="text-green-600 font-semibold">${userBalance.toFixed(2)}</span></p>
+                </div>
               )}
             </DialogDescription>
           </DialogHeader>
@@ -287,9 +323,14 @@ export function SavingsGoals() {
                 required
                 autoFocus
               />
+              {transactionDialog.type === 'deposit' && (
+                 <p className="text-xs text-gray-500">Máximo disponible para ingresar: ${userBalance.toFixed(2)}</p>
+              )}
+              {transactionDialog.type === 'withdraw' && selectedGoal && (
+                 <p className="text-xs text-gray-500">Máximo disponible para retirar: ${selectedGoal.currentAmount.toFixed(2)}</p>
+              )}
             </div>
             
-            {/* Mensajes de ayuda */}
             {selectedGoal && transactionDialog.type === 'deposit' && (
               <p className="text-sm text-gray-600">
                 Falta para completar: ${Math.max(0, selectedGoal.targetAmount - selectedGoal.currentAmount).toFixed(2)}
