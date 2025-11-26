@@ -1,45 +1,51 @@
 import { apiClient } from './api';
-import { SavingsGoal, ApiResponse } from '../types';
+import { SavingsGoal } from '../types';
+
+// Definimos el DTO de envío (lo que mandamos al backend)
+interface CreateGoalDTO {
+  name: string;
+  targetAmount: number;
+  endDate: string;
+  priority: string;
+  frequency?: string;
+  startDate?: string; 
+}
 
 export const savingsService = {
-  // Get all savings goals
-  async getSavingsGoals(): Promise<SavingsGoal[]> {
-    const response = await apiClient.get<ApiResponse<SavingsGoal[]>>('/savings-goals');
-    return response.data;
+  // Obtener todas las metas (GET /api/v1/savings-goals/all/{userId})
+  async getSavingsGoals(userId: number): Promise<SavingsGoal[]> {
+    // apiClient.get ya devuelve los datos directamente, no es necesario acceder a .data
+    return await apiClient.get<SavingsGoal[]>(`/savings-goals/all/${userId}`);
   },
 
-  // Create new savings goal
-  async createSavingsGoal(goal: Omit<SavingsGoal, 'id' | 'currentAmount'>): Promise<SavingsGoal> {
-    const response = await apiClient.post<ApiResponse<SavingsGoal>>('/savings-goals', goal);
-    return response.data;
+  // Crear meta (POST /api/v1/savings-goals/{userId})
+  async createSavingsGoal(userId: number, goal: CreateGoalDTO): Promise<SavingsGoal> {
+    return await apiClient.post<SavingsGoal>(`/savings-goals/${userId}`, goal);
   },
 
-  // Update savings goal
-  async updateSavingsGoal(id: number, goal: Partial<SavingsGoal>): Promise<SavingsGoal> {
-    const response = await apiClient.put<ApiResponse<SavingsGoal>>(`/savings-goals/${id}`, goal);
-    return response.data;
+  // Actualizar meta (PUT /api/v1/savings-goals/{idGoal}/{userId})
+  async updateSavingsGoal(idGoal: number, userId: number, goal: Partial<SavingsGoal>): Promise<SavingsGoal> {
+    return await apiClient.put<SavingsGoal>(`/savings-goals/${idGoal}/${userId}`, goal);
   },
 
-  // Delete savings goal
-  async deleteSavingsGoal(id: number): Promise<void> {
-    await apiClient.delete(`/savings-goals/${id}`);
+  // Eliminar meta (DELETE /api/v1/savings-goals/{idGoal}/{userId})
+  async deleteSavingsGoal(idGoal: number, userId: number): Promise<void> {
+    await apiClient.delete(`/savings-goals/${idGoal}/${userId}`);
   },
 
-  // Add money to savings goal
-  async addToSavingsGoal(id: number, amount: number): Promise<SavingsGoal> {
-    const response = await apiClient.post<ApiResponse<SavingsGoal>>(
-      `/savings-goals/${id}/add`,
+  // Abonar dinero (POST /api/v1/savings-goals/{idGoal}/{userId}/add)
+  async addToSavingsGoal(idGoal: number, userId: number, amount: number): Promise<SavingsGoal> {
+    return await apiClient.post<SavingsGoal>(
+      `/savings-goals/${idGoal}/${userId}/add`,
+      { amount } 
+    );
+  },
+
+  // Retirar dinero (POST /api/v1/savings-goals/{idGoal}/{userId}/withdraw)
+  async withdrawFromSavingsGoal(idGoal: number, userId: number, amount: number): Promise<SavingsGoal> {
+    return await apiClient.post<SavingsGoal>(
+      `/savings-goals/${idGoal}/${userId}/withdraw`,
       { amount }
     );
-    return response.data;
-  },
-
-  // Withdraw money from savings goal
-  async withdrawFromSavingsGoal(id: number, amount: number): Promise<SavingsGoal> {
-    const response = await apiClient.post<ApiResponse<SavingsGoal>>(
-      `/savings-goals/${id}/withdraw`,
-      { amount }
-    );
-    return response.data;
-  },
+  }
 };
