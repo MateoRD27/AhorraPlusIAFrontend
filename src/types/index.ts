@@ -135,14 +135,21 @@ export interface RecommendationDTO {
 // 
 // SAVINGS GOAL TYPES
 // 
+// Actualizamos la interfaz para que coincida con tu Backend (SavingGoalDTO)
 export interface SavingsGoal {
-  id: number;
+  idGoal: number; // El backend usa 'idGoal', no 'id'
   name: string;
   targetAmount: number;
   currentAmount: number;
-  deadline: string;
-  icon: string;
-  color: string;
+  startDate?: string; 
+  endDate: string;    
+  priority: 'HIGH' | 'MEDIUM' | 'LOW'; 
+  frequency?: 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY' | 'ANNUALLY';
+  status?: 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'CANCELED' | 'EXPIRED';
+  
+  // Campos visuales que el backend NO tiene (los manejaremos en el front)
+  icon?: string; 
+  color?: string;
 }
 
 // 
