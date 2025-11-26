@@ -1,38 +1,68 @@
 import { apiClient } from './api';
-import { DashboardStats, ChartData, ApiResponse } from '../types';
+import { 
+  DashboardStats, 
+  MonthlyData, 
+  PieData, 
+  RecentTransaction,
+  ApiResponse 
+} from '../types/index';
+import { AxiosResponse } from 'axios';
 
 export const dashboardService = {
-  // Get dashboard statistics
   async getDashboardStats(): Promise<DashboardStats> {
-    const response = await apiClient.get<ApiResponse<DashboardStats>>('/dashboard/stats');
-    return response.data;
+    const response: AxiosResponse<ApiResponse<DashboardStats>> = await apiClient.get('/dashboard/stats');
+    
+    console.log('🔍 Response completo:', response);
+    console.log('🔍 response.data:', response.data);
+    console.log('🔍 response.data.data:', response.data.data);
+    
+    // Si tu backend devuelve { success: true, data: {...} }
+    if (response.data.data) {
+      return response.data.data;
+    }
+    
+    // Si tu backend devuelve directamente {...}
+    return response.data as any;
   },
 
-  // Get monthly chart data
-  async getMonthlyChartData(): Promise<ChartData[]> {
-    const response = await apiClient.get<ApiResponse<ChartData[]>>('/dashboard/chart/monthly');
-    return response.data;
+  async getMonthlyData(): Promise<MonthlyData[]> {
+    const response: AxiosResponse<ApiResponse<MonthlyData[]>> = await apiClient.get('/dashboard/monthly-data');
+    
+    console.log('🔍 Monthly response.data:', response.data);
+    console.log('🔍 Monthly response.data.data:', response.data.data);
+    
+    if (response.data.data) {
+      return response.data.data;
+    }
+    
+    return response.data as any;
   },
 
-  // Get category breakdown
-  async getCategoryBreakdown(): Promise<ChartData[]> {
-    const response = await apiClient.get<ApiResponse<ChartData[]>>('/dashboard/chart/categories');
-    return response.data;
+  async getPieData(): Promise<PieData[]> {
+    const response: AxiosResponse<ApiResponse<PieData[]>> = await apiClient.get('/dashboard/pie-data');
+    
+    console.log('🔍 Pie response.data:', response.data);
+    console.log('🔍 Pie response.data.data:', response.data.data);
+    
+    if (response.data.data) {
+      return response.data.data;
+    }
+    
+    return response.data as any;
   },
 
-  // Get recent transactions
-  async getRecentTransactions(limit: number = 5): Promise<any[]> {
-    const response = await apiClient.get<ApiResponse<any[]>>(
-      `/dashboard/transactions/recent?limit=${limit}`
+  async getRecentTransactions(limit: number = 4): Promise<RecentTransaction[]> {
+    const response: AxiosResponse<ApiResponse<RecentTransaction[]>> = await apiClient.get(
+      `/dashboard/recent-transactions?limit=${limit}`
     );
-    return response.data;
-  },
-
-  // Get financial summary by period
-  async getFinancialSummary(period: 'week' | 'month' | 'year'): Promise<any> {
-    const response = await apiClient.get<ApiResponse<any>>(
-      `/dashboard/summary?period=${period}`
-    );
-    return response.data;
-  },
+    
+    console.log('🔍 Transactions response.data:', response.data);
+    console.log('🔍 Transactions response.data.data:', response.data.data);
+    
+    if (response.data.data) {
+      return response.data.data;
+    }
+    
+    return response.data as any;
+  }
 };

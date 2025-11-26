@@ -1,14 +1,3 @@
-// types/index.ts
-
-// 
-// API RESPONSE TYPES
-// 
-export interface ApiResponse<T> {
-  success?: boolean;
-  data: T;
-  message?: string;
-  status?: number;
-}
 
 export interface PaginatedResponse<T> {
   data: T[];
@@ -175,24 +164,6 @@ export interface Ticket {
   responses?: TicketResponse[];
 }
 
-// 
-// DASHBOARD & STATISTICS TYPES
-// 
-export interface DashboardStats {
-  // Financiero
-  totalBalance?: number;
-  totalIncome: number;
-  totalExpenses: number;
-  balance: number;
-  savingsRate?: number;
-  monthlyIncome: number;
-  monthlyExpenses: number;
-  savingsGoals?: number;
-  
-  // Cambios porcentuales
-  incomeChange?: number;
-  expenseChange?: number;
-}
 
 export interface AdminStats {
   totalUsers: number;
@@ -250,4 +221,38 @@ export interface ExpenseFormData {
   method: string;
   date: string;
   description: string;
+}
+
+export interface DashboardStats {
+  currentBalance: number;
+  monthlyIncome: number;
+  monthlyExpenses: number;
+  savingsPercentage: number;
+  incomeChange: number;
+  expenseChange: number;
+}
+
+export interface MonthlyData {
+  month: string;
+  ingresos: number;
+  gastos: number;
+}
+
+export interface PieData {
+  name: string;
+  value: number;
+}
+
+export interface RecentTransaction {
+  id: number;
+  type: 'ingreso' | 'gasto';
+  description: string;
+  amount: number;
+  date: string;
+}
+
+export interface ApiResponse<T> {
+  success: boolean;
+  data: T;
+  message?: string;
 }
